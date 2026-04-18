@@ -150,11 +150,75 @@ void ReplayMode::HandleAiThoughtPacket(const CoreUtils::Packet& p) {
 	if(player != GetPovSeat())
 		return;
 	int turn = j.value("turn", -1);
+	int thought_step = j.value("step", -1);
 	std::wstring decision_type = BufferIO::DecodeUTF8(j.value("decision_type", std::string{"?"}));
+	std::wstring phase = BufferIO::DecodeUTF8(j.value("phase", std::string{""}));
 	std::wstring move = BufferIO::DecodeUTF8(j.value("move", std::string{""}));
-	auto text = epro::format(
-		L"Turn {} · {} · Player {} · Step {}\n\nNext bot move: {}",
-		turn, decision_type, player, current_step + 1, move);
+	std::wstring move_desc = BufferIO::DecodeUTF8(j.value("move_description", std::string{""}));
+
+	// Chosen-action probability + predicted state value. Both optional — fall
+	// back gracefully when the bot is an older build that doesn't send them.
+	auto fmt_pct = [](double v) {
+		// One-decimal percent without locale pulling in a thousands separator.
+		int x = static_cast<int>(v * 1000.0 + 0.5);
+		return epro::format(L"{}.{}%", x / 10, x % 10);
+	};
+	auto fmt_value = [](double v) {
+		int x = static_cast<int>((v >= 0 ? v : -v) * 1000.0 + 0.5);
+		const wchar_t* sign = v >= 0 ? L"+" : L"-";
+		return epro::format(L"{}{}.{:03}", sign, x / 1000, x % 1000);
+	};
+
+	double confidence = j.value("confidence", -1.0);
+	double value = j.value("value", 999.0);  // sentinel: "not present"
+	int valid_count = j.value("valid_count", -1);
+
+	std::wstring text = epro::format(
+		L"Turn {} · {} · Player {} · Step {}",
+		turn, decision_type, player, current_step + 1);
+	if(!phase.empty())
+		text += epro::format(L"  ({})", phase);
+	text += L"\n\n";
+
+	// The chosen move gets the prominent line. Show the readable description
+	// with the raw action code in parentheses so both are searchable.
+	if(!move_desc.empty() && move_desc != move)
+		text += epro::format(L"Move: {}  ({})\n", move_desc, move);
+	else
+		text += epro::format(L"Move: {}\n", move);
+
+	if(confidence >= 0.0)
+		text += epro::format(L"Confidence: {}\n", fmt_pct(confidence));
+	if(value < 900.0)
+		text += epro::format(L"Predicted value: {}\n", fmt_value(value));
+	if(valid_count > 0)
+		text += epro::format(L"Valid actions: {}\n", valid_count);
+
+	// Top-K alternatives, ranked. Silently skipped when the payload doesn't
+	// include them (older WindBot builds).
+	if(j.contains("top_actions") && j["top_actions"].is_array()) {
+		const auto& arr = j["top_actions"];
+		if(!arr.empty()) {
+			text += L"\nTop actions:\n";
+			int rank = 0;
+			for(const auto& t : arr) {
+				++rank;
+				std::wstring a_code = BufferIO::DecodeUTF8(t.value("action", std::string{""}));
+				std::wstring a_desc = BufferIO::DecodeUTF8(t.value("description", std::string{""}));
+				double a_prob = t.value("prob", 0.0);
+				if(a_desc.empty() || a_desc == a_code)
+					text += epro::format(L"  {}. {}  ({})\n", rank, a_code, fmt_pct(a_prob));
+				else
+					text += epro::format(L"  {}. {}  ({}, {})\n", rank, a_desc, a_code, fmt_pct(a_prob));
+			}
+		}
+	}
+
+	// Match/step metadata on the last lines — useful when correlating with
+	// server-side logs.
+	if(thought_step >= 0)
+		text += epro::format(L"\nAction #{}", thought_step);
+
 	mainGame->stThoughts->setText(text.c_str());
 }
 
