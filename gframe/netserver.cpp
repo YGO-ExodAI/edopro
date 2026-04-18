@@ -432,6 +432,9 @@ void NetServer::HandleCTOSPacket(DuelPlayer* dp, uint8_t* data, uint32_t len) {
 		break;
 	}
 	case CTOS_HS_START: {
+		epro::print("[HS_START] received (duel_mode={} pduel={})\n",
+		            duel_mode != nullptr, duel_mode ? duel_mode->pduel != nullptr : false);
+		std::fflush(stdout);
 		if(!duel_mode || duel_mode->pduel)
 			break;
 		duel_mode->StartDuel(dp);

@@ -27,6 +27,10 @@ public:
 	static bool StartServer(uint16_t port);
 	static bool StartBroadcast();
 	static void StopServer();
+	// ExodAI: true while the background ServerThread is running. Used by
+	// bot_match.cpp to block on the headless eval harness until a duel
+	// completes and StopServer() is invoked by generic_duel.
+	static bool IsRunning() { return net_evbase != nullptr; }
 	static void StopBroadcast();
 	static void StopListen();
 	static void BroadcastEvent(evutil_socket_t fd, short events, void* arg);

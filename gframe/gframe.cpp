@@ -37,6 +37,9 @@ ygo::DeckManager* ygo::gdeckManager = nullptr;
 ygo::ClientUpdater* ygo::gClientUpdater = nullptr;
 JWrapper* gJWrapper = nullptr;
 
+// ExodAI: headless bot-match eval harness.
+#include "bot_match.h"
+
 namespace {
 void CheckArguments(const args_t& args) {
 	if(args[LAUNCH_PARAM::MUTE].enabled) {
@@ -158,6 +161,16 @@ int edopro_main(const args_t& args) {
 	}
 	if (!data->configs->noClientUpdates)
 		updater.CheckUpdates();
+	// ExodAI: headless bot-vs-bot eval path. Branch out BEFORE Irrlicht init
+	// — we don't need a window, just the NetServer + DataManager. After the
+	// duel ends (generic_duel::StopServer) this returns and the process
+	// exits; the Python eval harness picks up the yrpX from ./replay/.
+	if(args[LAUNCH_PARAM::BOT_MATCH].enabled) {
+		ygo::BotMatchConfig cfg;
+		if(!ygo::BotMatch::LoadConfig(args[LAUNCH_PARAM::BOT_MATCH].argument, cfg))
+			return EXIT_FAILURE;
+		return ygo::BotMatch::Run(cfg);
+	}
 #if EDOPRO_WINDOWS
 	if(!data->configs->showConsole) {
 		FILE* fDummy;

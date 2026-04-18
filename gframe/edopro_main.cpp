@@ -39,6 +39,8 @@ auto GetOption(epro::path_stringview option) {
 	}
 	if(option == EPRO_TEXT("i-want-to-be-admin"sv))
 		return LAUNCH_PARAM::WANTS_TO_RUN_AS_ADMIN;
+	if(option == EPRO_TEXT("bot-match"sv))
+		return LAUNCH_PARAM::BOT_MATCH;
 	return LAUNCH_PARAM::COUNT;
 }
 

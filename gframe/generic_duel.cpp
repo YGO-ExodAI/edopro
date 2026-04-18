@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cstdio>
+#include "fmt.h"
 #include "generic_duel.h"
 #include "netserver.h"
 #include "game.h"
@@ -442,12 +444,22 @@ void GenericDuel::UpdateDeck(DuelPlayer* dp, void* pdata, uint32_t len) {
 	}
 }
 void GenericDuel::StartDuel(DuelPlayer* dp) {
-	if(dp != host_player)
+	epro::print("[StartDuel] dp_is_host={} hp={} dp={}\n",
+	            dp == host_player, (void*)host_player, (void*)dp);
+	std::fflush(stdout);
+	if(dp != host_player) {
+		epro::print("[StartDuel] REJECT: dp != host_player\n"); std::fflush(stdout);
 		return;
-	if(!IteratePlayers([](duelist& dueler) { return dueler.ready; }))
+	}
+	if(!IteratePlayers([](duelist& dueler) { return dueler.ready; })) {
+		epro::print("[StartDuel] REJECT: IteratePlayers (not all ready)\n"); std::fflush(stdout);
 		return;
-	if(!CheckReady())
+	}
+	if(!CheckReady()) {
+		epro::print("[StartDuel] REJECT: CheckReady failed\n"); std::fflush(stdout);
 		return;
+	}
+	epro::print("[StartDuel] proceeding\n"); std::fflush(stdout);
 	OrderPlayers(players.home);
 	OrderPlayers(players.opposing, players.home_size);
 	players.home_iterator = players.home.begin();
