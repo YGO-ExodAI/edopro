@@ -740,6 +740,9 @@ public:
 	irr::gui::CGUITTFont* numFont;
 	irr::gui::CGUITTFont* adFont;
 	irr::gui::CGUITTFont* lpcFont;
+	// ExodAI: Thoughts tab gets its own font, +2pt over textFont, to make
+	// the per-step model reasoning easier to read while scrubbing a replay.
+	irr::gui::CGUITTFont* thoughtsFont;
 	std::map<irr::gui::CGUIImageButton*, uint32_t> imageLoading;
 	//hint text
 	irr::gui::IGUIStaticText* stHintMsg;

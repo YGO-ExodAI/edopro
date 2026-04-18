@@ -178,6 +178,14 @@ namespace ygo {
 			return RNG::Xoshiro256StarStar(GetRandomNumberGeneratorSeed());
 		}
 
+		// ExodAI eval harness hook: force `generator` to a known state so that
+		// deck shuffles and ocgcore seeding are reproducible across runs. Only
+		// called from bot_match startup; normal gameplay leaves `generator`
+		// seeded from the clock (see utils.cpp).
+		static inline void SeedRandomNumberGenerator(uint64_t seed) {
+			generator = RNG::SplitMix64(seed);
+		}
+
 	private:
 		static void InternalSetThreadName(const char* name, const wchar_t* wname);
 		template<typename T>

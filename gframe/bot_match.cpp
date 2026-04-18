@@ -11,6 +11,8 @@
 #include "netserver.h"
 #include "utils.h"
 
+#include <cstdint>
+
 namespace ygo {
 
 namespace {
@@ -31,6 +33,8 @@ bool BotMatch::LoadConfig(epro::path_stringview config_path, BotMatchConfig& out
         f >> j;
         if(j.contains("port"))         out.port        = j.at("port").get<uint16_t>();
         if(j.contains("timeout_sec"))  out.timeout_sec = j.at("timeout_sec").get<int>();
+        if(j.contains("seed") && !j.at("seed").is_null())
+            out.seed = j.at("seed").get<uint64_t>();
     } catch(const std::exception& e) {
         epro::print("[BOT_MATCH] json parse error: {}\n", e.what());
         return false;
@@ -45,6 +49,11 @@ bool BotMatch::LoadConfig(epro::path_stringview config_path, BotMatchConfig& out
 int BotMatch::Run(const BotMatchConfig& cfg) {
     epro::print("[BOT_MATCH] starting NetServer on port {} (timeout={}s)\n",
                 cfg.port, cfg.timeout_sec);
+    if(cfg.seed) {
+        Utils::SeedRandomNumberGenerator(*cfg.seed);
+        epro::print("[BOT_MATCH] deterministic seed={} — deck shuffle + ocgcore RNG are reproducible\n",
+                    *cfg.seed);
+    }
     // Make log output visible to the Python harness immediately — EDOPro's
     // normal stdout path may be line-buffered.
     std::fflush(stdout);

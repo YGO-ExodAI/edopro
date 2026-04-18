@@ -94,6 +94,8 @@ Game::~Game() {
 		adFont->drop();
 	if(lpcFont)
 		lpcFont->drop();
+	if(thoughtsFont)
+		thoughtsFont->drop();
 	if(filesystem)
 		filesystem->drop();
 	if(skinSystem)
@@ -173,6 +175,19 @@ void Game::Initialize() {
 	lpcFont = irr::gui::CGUITTFont::createTTFont(env, numfont, fallbackFonts);
 	if(!numFont || !adFont || !lpcFont)
 		throw std::runtime_error("Failed to load numbers font");
+
+	// ExodAI: Thoughts tab uses a font 2pt larger than the body text for
+	// readability while scrubbing a replay. Fall back to textFont if the
+	// bigger variant fails to load so the tab still renders.
+	{
+		auto bigger = gGameConfig->textfont;
+		bigger.size = Scale(static_cast<uint8_t>(bigger.size + 2));
+		thoughtsFont = irr::gui::CGUITTFont::createTTFont(env, bigger, fallbackFonts);
+		if(thoughtsFont == nullptr) {
+			thoughtsFont = textFont;
+			thoughtsFont->grab();
+		}
+	}
 	if(!ApplySkin(gGameConfig->skin, false, true)) {
 		gGameConfig->skin = NoSkinLabel();
 		ApplySkin(gGameConfig->skin, false, true);
@@ -1515,6 +1530,7 @@ void Game::PopulateTabSettingsWindow() {
 		auto thoughtsText = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabThoughts, -1, Scale(10, 10, 290, 324));
 		thoughtsText->enableScrollBar();
 		thoughtsText->setWordWrap(true);
+		thoughtsText->setOverrideFont(thoughtsFont);
 		stThoughts = thoughtsText;
 	}
 	//system

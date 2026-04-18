@@ -122,8 +122,10 @@ void ReplayMode::HandleDecisionPointPacket(const CoreUtils::Packet& p) {
 	uint8_t select_type = p.data()[1];
 	// current_step is incremented AFTER this handler, so + 1 labels the step
 	// the pause will actually land on.
+	// Middle dot escaped as \u00B7 — MSVC without /utf-8 mis-decodes raw
+	// UTF-8 bytes (C2 B7) in a wide string literal, rendering "·" as "·".
 	auto text = epro::format(
-		L"Turn {} · {} · Player {} · Step {}\n\nNo decision point data",
+		L"Turn {} \u00B7 {} \u00B7 Player {} \u00B7 Step {}\n\nNo decision point data",
 		current_turn, SelectMsgTypeName(select_type), decision_player, current_step + 1);
 	mainGame->stThoughts->setText(text.c_str());
 }
@@ -171,10 +173,15 @@ void ReplayMode::HandleAiThoughtPacket(const CoreUtils::Packet& p) {
 
 	double confidence = j.value("confidence", -1.0);
 	double value = j.value("value", 999.0);  // sentinel: "not present"
+	// Win probability is 0..1; use a sentinel < 0 when the field is absent
+	// or null (older checkpoints predating the win-prob head).
+	double win_prob = -1.0;
+	if(j.contains("win_prob") && !j["win_prob"].is_null())
+		win_prob = j.value("win_prob", -1.0);
 	int valid_count = j.value("valid_count", -1);
 
 	std::wstring text = epro::format(
-		L"Turn {} · {} · Player {} · Step {}",
+		L"Turn {} \u00B7 {} \u00B7 Player {} \u00B7 Step {}",
 		turn, decision_type, player, current_step + 1);
 	if(!phase.empty())
 		text += epro::format(L"  ({})", phase);
@@ -191,6 +198,8 @@ void ReplayMode::HandleAiThoughtPacket(const CoreUtils::Packet& p) {
 		text += epro::format(L"Confidence: {}\n", fmt_pct(confidence));
 	if(value < 900.0)
 		text += epro::format(L"Predicted value: {}\n", fmt_value(value));
+	if(win_prob >= 0.0)
+		text += epro::format(L"Win probability: {}\n", fmt_pct(win_prob));
 	if(valid_count > 0)
 		text += epro::format(L"Valid actions: {}\n", valid_count);
 

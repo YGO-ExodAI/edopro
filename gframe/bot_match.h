@@ -15,6 +15,9 @@
 // Game/Irrlicht — branching into bot_match happens between those two
 // points in gframe.cpp.
 
+#include <cstdint>
+#include <optional>
+
 #include "text_types.h"
 
 namespace ygo {
@@ -22,6 +25,10 @@ namespace ygo {
 struct BotMatchConfig {
     uint16_t port = 7999;
     int timeout_sec = 600;  // hard cap — if a duel somehow hangs, exit anyway
+    // If set, reseeds Utils::generator before the server starts so deck
+    // shuffles + the seed fed into ocgcore are reproducible. Used by the
+    // ExodAI eval harness to compare model checkpoints on identical games.
+    std::optional<uint64_t> seed;
 };
 
 class BotMatch {
