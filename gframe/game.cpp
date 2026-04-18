@@ -829,19 +829,24 @@ void Game::Initialize() {
 	btnFileSaveNo = env->addButton(Scale(170, 80, 240, 105), wFileSave, BUTTON_FILE_CANCEL, gDataManager->GetSysString(1212).data());
 	defaultStrings.emplace_back(btnFileSaveNo, 1212);
 	//replay control
-	wReplayControl = AlignElementWithParent(env->addStaticText(L"", Scale(205, 143, 295, 273), true, false, 0, -1, true));
+	wReplayControl = AlignElementWithParent(env->addStaticText(L"", Scale(205, 18, 295, 273), true, false, 0, -1, true));
 	wReplayControl->setVisible(false);
 	btnReplayStart = AlignElementWithParent(env->addButton(Scale(5, 5, 85, 25), wReplayControl, BUTTON_REPLAY_START, gDataManager->GetSysString(1343).data()));
 	defaultStrings.emplace_back(btnReplayStart, 1343);
 	btnReplayPause = AlignElementWithParent(env->addButton(Scale(5, 5, 85, 25), wReplayControl, BUTTON_REPLAY_PAUSE, gDataManager->GetSysString(1344).data()));
 	defaultStrings.emplace_back(btnReplayPause, 1344);
-	btnReplayStep = AlignElementWithParent(env->addButton(Scale(5, 55, 85, 75), wReplayControl, BUTTON_REPLAY_STEP, gDataManager->GetSysString(1345).data()));
-	defaultStrings.emplace_back(btnReplayStep, 1345);
-	btnReplayUndo = AlignElementWithParent(env->addButton(Scale(5, 80, 85, 100), wReplayControl, BUTTON_REPLAY_UNDO, gDataManager->GetSysString(1360).data()));
-	defaultStrings.emplace_back(btnReplayUndo, 1360);
 	btnReplaySwap = AlignElementWithParent(env->addButton(Scale(5, 30, 85, 50), wReplayControl, BUTTON_REPLAY_SWAP, gDataManager->GetSysString(1346).data()));
 	defaultStrings.emplace_back(btnReplaySwap, 1346);
-	btnReplayExit = AlignElementWithParent(env->addButton(Scale(5, 105, 85, 125), wReplayControl, BUTTON_REPLAY_EXIT, gDataManager->GetSysString(1347).data()));
+	btnReplayStep = AlignElementWithParent(env->addButton(Scale(5, 55, 85, 75), wReplayControl, BUTTON_REPLAY_STEP, gDataManager->GetSysString(1345).data()));
+	defaultStrings.emplace_back(btnReplayStep, 1345);
+	btnReplayStepDecisionPrev = AlignElementWithParent(env->addButton(Scale(5, 80, 85, 100), wReplayControl, BUTTON_REPLAY_STEP_DECISION_PREV, L"Prev Decision"));
+	btnReplayStepDecision = AlignElementWithParent(env->addButton(Scale(5, 105, 85, 125), wReplayControl, BUTTON_REPLAY_STEP_DECISION, L"Next Decision"));
+	btnReplayPrevTurn = AlignElementWithParent(env->addButton(Scale(5, 130, 85, 150), wReplayControl, BUTTON_REPLAY_PREV_TURN, L"Prev Turn"));
+	btnReplayNextTurn = AlignElementWithParent(env->addButton(Scale(5, 155, 85, 175), wReplayControl, BUTTON_REPLAY_NEXT_TURN, L"Next Turn"));
+	btnReplayRestart = AlignElementWithParent(env->addButton(Scale(5, 180, 85, 200), wReplayControl, BUTTON_REPLAY_RESTART, L"Restart"));
+	btnReplayUndo = AlignElementWithParent(env->addButton(Scale(5, 205, 85, 225), wReplayControl, BUTTON_REPLAY_UNDO, gDataManager->GetSysString(1360).data()));
+	defaultStrings.emplace_back(btnReplayUndo, 1360);
+	btnReplayExit = AlignElementWithParent(env->addButton(Scale(5, 230, 85, 250), wReplayControl, BUTTON_REPLAY_EXIT, gDataManager->GetSysString(1347).data()));
 	defaultStrings.emplace_back(btnReplayExit, 1347);
 	//chat
 	wChat = AlignElementWithParent(env->addWindow(Scale(305, 615, 1020, 640), false, L""));
@@ -1424,7 +1429,7 @@ void Game::PopulateAIBotWindow() {
 #else
 	static constexpr bool showWindbotArgs = false;
 #endif
-	gBot.window = env->addWindow(Scale(750, 120, 960, showWindbotArgs ? 455 : 420), false, gDataManager->GetSysString(2051).data());
+	gBot.window = env->addWindow(Scale(750, 120, 960, showWindbotArgs ? 490 : 455), false, gDataManager->GetSysString(2051).data());
 	defaultStrings.emplace_back(gBot.window, 2051);
 	gBot.window->getCloseButton()->setVisible(false);
 	gBot.window->setVisible(false);
@@ -1439,8 +1444,9 @@ void Game::PopulateAIBotWindow() {
 	gBot.cbBotEngine = AddComboBox(env, Scale(10, 225, 200, 250), gBot.window, COMBOBOX_BOT_ENGINE);
 	gBot.btnAdd = env->addButton(Scale(10, 260, 200, 285), gBot.window, BUTTON_BOT_ADD, gDataManager->GetSysString(2054).data());
 	defaultStrings.emplace_back(gBot.btnAdd, 2054);
+	gBot.btnMLModel = env->addButton(Scale(10, 295, 200, 320), gBot.window, BUTTON_BOT_ML_MODEL, L"ML Model");
 	if(showWindbotArgs) {
-		gBot.btnCommand = env->addButton(Scale(10, 295, 200, 320), gBot.window, BUTTON_BOT_COPY_COMMAND, gDataManager->GetSysString(12120).data());
+		gBot.btnCommand = env->addButton(Scale(10, 330, 200, 355), gBot.window, BUTTON_BOT_COPY_COMMAND, gDataManager->GetSysString(12120).data());
 		defaultStrings.emplace_back(gBot.btnCommand, 12120);
 	}
 }
@@ -1502,6 +1508,14 @@ void Game::PopulateTabSettingsWindow() {
 		defaultStrings.emplace_back(btnClearChat, 1282);
 		btnExpandChat = env->addButton(Scale(40, 300, 140, 325), tabChat, BUTTON_EXPAND_INFOBOX, gDataManager->GetSysString(2043).data());
 		defaultStrings.emplace_back(btnExpandChat, 2043);
+	}
+	//thoughts (ExodAI: model's per-step reasoning during replay playback)
+	{
+		tabThoughts = wInfos->addTab(L"Thoughts");
+		auto thoughtsText = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabThoughts, -1, Scale(10, 10, 290, 324));
+		thoughtsText->enableScrollBar();
+		thoughtsText->setWordWrap(true);
+		stThoughts = thoughtsText;
 	}
 	//system
 	{

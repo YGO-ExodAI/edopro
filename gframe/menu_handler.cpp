@@ -28,6 +28,9 @@
 #include "address.h"
 #include "fmt.h"
 #include "localtime.h"
+#include "ml_model_launcher.h"
+#include "network.h"
+#include "exodai_dev_build.h"
 
 namespace ygo {
 
@@ -78,6 +81,11 @@ static void LoadReplay() {
 	mainGame->btnReplayStart->setVisible(false);
 	mainGame->btnReplayPause->setVisible(true);
 	mainGame->btnReplayStep->setVisible(false);
+	mainGame->btnReplayStepDecision->setVisible(false);
+	mainGame->btnReplayStepDecisionPrev->setVisible(false);
+	mainGame->btnReplayNextTurn->setVisible(false);
+	mainGame->btnReplayPrevTurn->setVisible(false);
+	mainGame->btnReplayRestart->setVisible(false);
 	mainGame->btnReplayUndo->setVisible(false);
 	mainGame->wPhase->setVisible(true);
 	mainGame->dField.Clear();
@@ -437,6 +445,24 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 						break;
 				} catch(...) {}
 				mainGame->PopupMessage(gDataManager->GetSysString(12122).data());
+				break;
+			}
+			case BUTTON_BOT_ML_MODEL: {
+				int port = 0;
+				try {
+					port = std::stoi(gGameConfig->serverport);
+				} catch(...) {
+					mainGame->PopupMessage(gDataManager->GetSysString(12122).data());
+					break;
+				}
+				mainGame->AddLog(epro::format(L"[ExodAI] EDOPro dev build #{} — launching ML Model", EXODAI_DEV_BUILD), 0);
+				auto result = LaunchMLModelBot(port, std::wstring{ mainGame->dInfo.secret.pass });
+				if(!result.ok) {
+					mainGame->PopupMessage(result.errorMessage);
+					break;
+				}
+				auto msg = epro::format(L"Model {} joined the lobby", result.modelName);
+				mainGame->AddChatMsg(L"", msg, STOC_Chat2::PTYPE_SYSTEM);
 				break;
 			}
 			case BUTTON_BOT_COPY_COMMAND: {

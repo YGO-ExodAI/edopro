@@ -262,6 +262,15 @@ if not _OPTIONS["no-core"] then
 		end
 		links { "ocgcore" }
 		ygopro_config(true)
+		-- ExodAI deploy: after a successful Release|Win32 build, copy the
+		-- freshly built ygopro.exe into C:\ProjectIgnis\EDOPro.exe so the
+		-- user's live client (with cards/scripts/databases) picks up the
+		-- change without a manual copy step.
+		filter { "system:windows", "configurations:Release" }
+			postbuildcommands {
+				'copy /Y "%{cfg.buildtarget.abspath}" "C:\\ProjectIgnis\\EDOPro.exe"'
+			}
+		filter {}
 end
 
 project "ygoprodll"

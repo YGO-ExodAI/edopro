@@ -303,13 +303,19 @@ void NetServer::HandleCTOSPacket(DuelPlayer* dp, uint8_t* data, uint32_t len) {
 	static constexpr ClientVersion serverversion{ EXPAND_VERSION(CLIENT_VERSION) };
 	auto* pdata = data;
 	uint8_t pktType = BufferIO::Read<uint8_t>(pdata);
-	if((pktType != CTOS_SURRENDER) && (pktType != CTOS_CHAT) && (dp->state == 0xff || (dp->state && dp->state != pktType)))
+	if((pktType != CTOS_SURRENDER) && (pktType != CTOS_CHAT) && (pktType != CTOS_AI_THOUGHT) && (dp->state == 0xff || (dp->state && dp->state != pktType)))
 		return;
 	switch(pktType) {
 	case CTOS_RESPONSE: {
 		if(!dp->game || !duel_mode->pduel)
 			return;
 		duel_mode->GetResponse(dp, pdata, len - 1);
+		break;
+	}
+	case CTOS_AI_THOUGHT: {
+		if(!dp->game || !duel_mode || !duel_mode->pduel)
+			return;
+		duel_mode->AiThought(dp, pdata, len - 1);
 		break;
 	}
 	case CTOS_TIME_CONFIRM: {

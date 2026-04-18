@@ -20,6 +20,7 @@
 #include "CGUITTFont/CGUITTFont.h"
 #include "custom_skin_enum.h"
 #include "Base64.h"
+#include "ml_model_launcher.h"
 #include <IrrlichtDevice.h>
 #include <ISceneManager.h>
 #include <ICameraSceneNode.h>
@@ -89,6 +90,11 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 				mainGame->btnReplayStart->setVisible(false);
 				mainGame->btnReplayPause->setVisible(true);
 				mainGame->btnReplayStep->setVisible(false);
+				mainGame->btnReplayStepDecision->setVisible(false);
+				mainGame->btnReplayStepDecisionPrev->setVisible(false);
+				mainGame->btnReplayNextTurn->setVisible(false);
+				mainGame->btnReplayPrevTurn->setVisible(false);
+				mainGame->btnReplayRestart->setVisible(false);
 				mainGame->btnReplayUndo->setVisible(false);
 				ReplayMode::Pause(false, false);
 				break;
@@ -99,6 +105,11 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 				mainGame->btnReplayStart->setVisible(true);
 				mainGame->btnReplayPause->setVisible(false);
 				mainGame->btnReplayStep->setVisible(true);
+				mainGame->btnReplayStepDecision->setVisible(true);
+				mainGame->btnReplayStepDecisionPrev->setVisible(true);
+				mainGame->btnReplayNextTurn->setVisible(true);
+				mainGame->btnReplayPrevTurn->setVisible(true);
+				mainGame->btnReplayRestart->setVisible(true);
 				mainGame->btnReplayUndo->setVisible(true);
 				ReplayMode::Pause(true, false);
 				break;
@@ -107,6 +118,36 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 				if(!mainGame->dInfo.isReplay)
 					break;
 				ReplayMode::Pause(false, true);
+				break;
+			}
+			case BUTTON_REPLAY_STEP_DECISION: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				ReplayMode::StepToNextDecisionPoint();
+				break;
+			}
+			case BUTTON_REPLAY_STEP_DECISION_PREV: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				ReplayMode::StepToPrevDecisionPoint();
+				break;
+			}
+			case BUTTON_REPLAY_NEXT_TURN: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				ReplayMode::StepToNextTurn();
+				break;
+			}
+			case BUTTON_REPLAY_PREV_TURN: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				ReplayMode::StepToPrevTurn();
+				break;
+			}
+			case BUTTON_REPLAY_RESTART: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				ReplayMode::JumpToStart();
 				break;
 			}
 			case BUTTON_REPLAY_EXIT: {
@@ -143,6 +184,7 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 				break;
 			}
 			case BUTTON_LEAVE_GAME: {
+				ShutdownMLModelBot();
 				if(mainGame->dInfo.isSingleMode) {
 					SingleMode::singleSignal.SetNoWait(true);
 					SingleMode::StopPlay(false);

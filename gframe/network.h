@@ -244,6 +244,8 @@ public:
 	virtual void GetResponse(DuelPlayer* dp, void* pdata, uint32_t len) = 0;
 	virtual void TimeConfirm(DuelPlayer* dp) = 0;
 	virtual void EndDuel() = 0;
+	// Default no-op — only GenericDuel cares; other modes (single/replay) ignore.
+	virtual void AiThought(DuelPlayer* /*dp*/, void* /*pdata*/, uint32_t /*len*/) {}
 
 public:
 	event* etimer{ nullptr };
@@ -290,6 +292,13 @@ public:
 #define CTOS_HS_START		0x25
 
 #define CTOS_REMATCH_RESPONSE 0xf0
+
+// ExodAI extension. The bot sends this right before each top-level CTOS_RESPONSE
+// with a JSON payload describing what move it's about to play. The server
+// injects a matching MSG_AI_THOUGHT packet into the replay stream so the
+// thought is pinned to the exact decision point in the .yrpX timeline.
+// Payload: uint16 length + UTF-8 JSON bytes.
+#define CTOS_AI_THOUGHT       0x30
 
 #define STOC_GAME_MSG		0x1
 #define STOC_ERROR_MSG		0x2

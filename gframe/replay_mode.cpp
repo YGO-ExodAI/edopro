@@ -1,11 +1,16 @@
 #include <IrrlichtDevice.h>
 #include <IGUIWindow.h>
 #include <IGUIStaticText.h>
+#include <algorithm>
+#include <nlohmann/json.hpp>
 #include "replay_mode.h"
 #include "duelclient.h"
 #include "game.h"
 #include "single_mode.h"
 #include "sound_manager.h"
+#include "file_stream.h"
+#include "bufferio.h"
+#include "logging.h"
 
 namespace ygo {
 
@@ -24,6 +29,134 @@ int ReplayMode::skip_turn = 0;
 int ReplayMode::current_step = 0;
 int ReplayMode::skip_step = 0;
 epro::thread ReplayMode::replay_thread;
+
+int ReplayMode::current_turn = 0;
+int ReplayMode::current_decision_idx = 0;
+bool ReplayMode::stop_at_decision_point = false;
+bool ReplayMode::stop_at_turn_boundary = false;
+bool ReplayMode::armed_post_turn_boundary = false;
+bool ReplayMode::peek_next_is_ai_thought = false;
+int ReplayMode::jump_target_step = -1;
+std::set<int> ReplayMode::known_bot_seats;
+
+void ReplayMode::ScanForKnownBotSeats() {
+	known_bot_seats.clear();
+	for(const auto& p : cur_replay.packets_stream) {
+		if(p.message != MSG_AI_THOUGHT)
+			continue;
+		int player = GetAiThoughtPlayer(p);
+		if(player >= 0)
+			known_bot_seats.insert(player);
+	}
+}
+
+int ReplayMode::GetPovSeat() {
+	// The bottom-of-screen player. Starts at seat 0, flips each SwapField.
+	return mainGame && mainGame->dInfo.isReplaySwapped ? 1 : 0;
+}
+
+int ReplayMode::GetAiThoughtPlayer(const CoreUtils::Packet& p) {
+	// Payload: uint16 length + UTF-8 JSON. JSON must contain {"player": int}.
+	if(p.buff_size() < 2)
+		return -1;
+	const auto* pbuf = p.data();
+	uint16_t len = BufferIO::Read<uint16_t>(pbuf);
+	if(len + sizeof(uint16_t) > p.buff_size())
+		return -1;
+	try {
+		auto j = nlohmann::json::parse(std::string(reinterpret_cast<const char*>(pbuf), len));
+		return j.value("player", -1);
+	} catch(const std::exception&) {
+		return -1;
+	}
+}
+
+void ReplayMode::ResetThoughtsState() {
+	current_turn = 0;
+	current_decision_idx = 0;
+	if(mainGame && mainGame->stThoughts)
+		mainGame->stThoughts->setText(L"");
+}
+
+static const wchar_t* SelectMsgTypeName(uint8_t msg) {
+	// Names the MSG_SELECT_* code stored in MSG_DECISION_POINT's payload
+	// byte 1. Covers every variant emitted by generic_duel.cpp Sending.
+	switch(msg) {
+	case MSG_SELECT_BATTLECMD:      return L"SelectBattleCmd";
+	case MSG_SELECT_IDLECMD:        return L"SelectIdleCmd";
+	case MSG_SELECT_EFFECTYN:       return L"SelectEffectYN";
+	case MSG_SELECT_YESNO:          return L"SelectYesNo";
+	case MSG_SELECT_OPTION:         return L"SelectOption";
+	case MSG_SELECT_CARD:           return L"SelectCard";
+	case MSG_SELECT_CHAIN:          return L"SelectChain";
+	case MSG_SELECT_PLACE:          return L"SelectPlace";
+	case MSG_SELECT_POSITION:       return L"SelectPosition";
+	case MSG_SELECT_TRIBUTE:        return L"SelectTribute";
+	case MSG_SORT_CHAIN:            return L"SortChain";
+	case MSG_SELECT_COUNTER:        return L"SelectCounter";
+	case MSG_SELECT_SUM:            return L"SelectSum";
+	case MSG_SELECT_DISFIELD:       return L"SelectDisfield";
+	case MSG_SORT_CARD:             return L"SortCard";
+	case MSG_SELECT_UNSELECT_CARD:  return L"SelectUnselectCard";
+	case MSG_ROCK_PAPER_SCISSORS:   return L"RockPaperScissors";
+	case MSG_ANNOUNCE_RACE:         return L"AnnounceRace";
+	case MSG_ANNOUNCE_ATTRIB:       return L"AnnounceAttrib";
+	case MSG_ANNOUNCE_CARD:         return L"AnnounceCard";
+	case MSG_ANNOUNCE_NUMBER:       return L"AnnounceNumber";
+	default:                        return L"Unknown";
+	}
+}
+
+void ReplayMode::HandleDecisionPointPacket(const CoreUtils::Packet& p) {
+	// Payload: [player_byte, select_msg_type_byte]. Only touch the Thoughts
+	// tab when this decision is for the POV player; non-POV decisions aren't
+	// relevant to the tab. If an MSG_AI_THOUGHT follows (peek), this text
+	// will be immediately overwritten with the real thought.
+	if(p.buff_size() < 2)
+		return;
+	if(!mainGame || !mainGame->stThoughts)
+		return;
+	int decision_player = p.data()[0];
+	if(decision_player != GetPovSeat())
+		return;
+	uint8_t select_type = p.data()[1];
+	// current_step is incremented AFTER this handler, so + 1 labels the step
+	// the pause will actually land on.
+	auto text = epro::format(
+		L"Turn {} · {} · Player {} · Step {}\n\nNo decision point data",
+		current_turn, SelectMsgTypeName(select_type), decision_player, current_step + 1);
+	mainGame->stThoughts->setText(text.c_str());
+}
+
+void ReplayMode::HandleAiThoughtPacket(const CoreUtils::Packet& p) {
+	if(!mainGame || !mainGame->stThoughts)
+		return;
+	// Payload layout: uint16 length + UTF-8 JSON bytes.
+	if(p.buff_size() < 2)
+		return;
+	const auto* pbuf = p.data();
+	uint16_t len = BufferIO::Read<uint16_t>(pbuf);
+	if(len + sizeof(uint16_t) > p.buff_size())
+		return;
+	std::string raw(reinterpret_cast<const char*>(pbuf), len);
+	nlohmann::json j;
+	try {
+		j = nlohmann::json::parse(raw);
+	} catch(const std::exception&) {
+		return;
+	}
+	// Filter by POV — ignore thoughts from the other side of the board.
+	int player = j.value("player", -1);
+	if(player != GetPovSeat())
+		return;
+	int turn = j.value("turn", -1);
+	std::wstring decision_type = BufferIO::DecodeUTF8(j.value("decision_type", std::string{"?"}));
+	std::wstring move = BufferIO::DecodeUTF8(j.value("move", std::string{""}));
+	auto text = epro::format(
+		L"Turn {} · {} · Player {} · Step {}\n\nNext bot move: {}",
+		turn, decision_type, player, current_step + 1, move);
+	mainGame->stThoughts->setText(text.c_str());
+}
 
 bool ReplayMode::StartReplay(int skipturn, bool is_yrp) {
 	if(mainGame->dInfo.isReplay)
@@ -74,6 +207,132 @@ void ReplayMode::Pause(bool is_pause, bool is_step) {
 		mainGame->actionSignal.Set();
 	}
 }
+void ReplayMode::StepToNextDecisionPoint() {
+	// Arm the flag, resume play. The pauseable block in ReplayAnalyze flips
+	// is_pausing back on the next pauseable decision marker that belongs to
+	// the POV player. Non-POV decisions are non-pauseable and are skipped.
+	stop_at_decision_point = true;
+	is_pausing = false;
+	mainGame->actionSignal.Set();
+}
+
+ReplayMode::ScanResults ReplayMode::ScanPacketsStream() {
+	// Walks packets_stream once, replicating ReplayAnalyze's pauseable rules,
+	// to find pauseable-step indices for POV decisions and turn boundaries.
+	// Used by the Prev Decision / Prev Turn buttons to locate targets.
+	// O(stream_length); stream is at most a few thousand packets.
+	ScanResults out;
+	int pov = GetPovSeat();
+	int step = 0;
+	const auto& packets = cur_replay.packets_stream;
+	for(size_t i = 0; i < packets.size(); ++i) {
+		const auto& p = packets[i];
+		bool pauseable = true;
+		bool decision_marker_pov = false;
+		bool turn_boundary = false;
+		if(p.message == MSG_AI_THOUGHT) {
+			int player = GetAiThoughtPlayer(p);
+			if(player != pov)
+				pauseable = false;
+			else
+				decision_marker_pov = true;
+		} else if(p.message == MSG_DECISION_POINT) {
+			int dp_player = (p.buff_size() >= 1) ? p.data()[0] : -1;
+			bool next_is_thought = (i + 1 < packets.size()
+				&& packets[i + 1].message == MSG_AI_THOUGHT);
+			if(dp_player != pov)
+				pauseable = false;
+			else if(next_is_thought)
+				pauseable = false;  // defer to the thought's pause
+			else if(known_bot_seats.count(dp_player))
+				pauseable = false;  // bot seat, no thought → framework auto-resolved
+			else
+				decision_marker_pov = true;
+		} else {
+			switch(p.message) {
+			case MSG_START: case MSG_UPDATE_DATA: case MSG_UPDATE_CARD:
+			case MSG_SET: case MSG_SWAP: case MSG_FIELD_DISABLED:
+			case MSG_SUMMONING: case MSG_SPSUMMONING: case MSG_FLIPSUMMONING:
+			case MSG_CHAIN_SOLVING: case MSG_CHAIN_SOLVED: case MSG_CHAIN_END:
+			case MSG_RANDOM_SELECTED: case MSG_EQUIP: case MSG_UNEQUIP:
+			case MSG_CARD_TARGET: case MSG_CANCEL_TARGET: case MSG_BATTLE:
+			case MSG_ATTACK_DISABLED: case MSG_DAMAGE_STEP_START:
+			case MSG_DAMAGE_STEP_END: case MSG_TAG_SWAP: case MSG_RELOAD_FIELD:
+			case MSG_AI_NAME: case OLD_REPLAY_MODE:
+				pauseable = false;
+				break;
+			case MSG_NEW_TURN:
+				turn_boundary = true;
+				break;
+			default:
+				break;
+			}
+		}
+		if(pauseable) {
+			step++;
+			if(decision_marker_pov)
+				out.pov_decision_steps.push_back(step);
+			if(turn_boundary)
+				out.turn_boundary_steps.push_back(step);
+		}
+	}
+	return out;
+}
+
+static int FindLargestLessThan(const std::vector<int>& xs, int bound) {
+	int target = -1;
+	for(int s : xs) {
+		if(s < bound)
+			target = s;
+		else
+			break;  // xs is ascending
+	}
+	return target;
+}
+
+void ReplayMode::StepToPrevDecisionPoint() {
+	if(mainGame->dInfo.isCatchingUp || current_step == 0)
+		return;
+	int target = FindLargestLessThan(ScanPacketsStream().pov_decision_steps, current_step);
+	if(target < 0)
+		target = 0;  // no prior POV decision — jump to start
+	jump_target_step = target;
+	mainGame->dInfo.isCatchingUp = true;
+	Restart(false);
+	Pause(false, false);
+}
+
+void ReplayMode::StepToNextTurn() {
+	// Arm the flag, resume play. The pauseable block in ReplayAnalyze flips
+	// is_pausing back on the next MSG_NEW_TURN packet.
+	stop_at_turn_boundary = true;
+	is_pausing = false;
+	mainGame->actionSignal.Set();
+}
+
+void ReplayMode::StepToPrevTurn() {
+	if(mainGame->dInfo.isCatchingUp || current_step == 0)
+		return;
+	// Mirror Next Turn: target the step AFTER the boundary so the board
+	// renders the new turn's state. Also use (current_step - 1) as the
+	// upper bound so we skip past the current turn's start on first press,
+	// giving "restart this turn" semantics on the first click.
+	int boundary = FindLargestLessThan(ScanPacketsStream().turn_boundary_steps, current_step - 1);
+	int target = (boundary < 0) ? 0 : boundary + 1;
+	jump_target_step = target;
+	mainGame->dInfo.isCatchingUp = true;
+	Restart(false);
+	Pause(false, false);
+}
+
+void ReplayMode::JumpToStart() {
+	if(mainGame->dInfo.isCatchingUp)
+		return;
+	jump_target_step = 0;
+	mainGame->dInfo.isCatchingUp = true;
+	Restart(false);
+	Pause(false, false);
+}
 int ReplayMode::ReplayThread() {
 	Utils::SetThreadName("ReplayMode");
 	mainGame->dInfo.isReplay = true;
@@ -115,15 +374,27 @@ int ReplayMode::ReplayThread() {
 	skip_step = 0;
 	exit_pending = false;
 	current_step = 0;
+	ScanForKnownBotSeats();
+	ResetThoughtsState();
 	if(mainGame->dInfo.isCatchingUp)
 		mainGame->gMutex.lock();
 	for(auto it = current_stream.begin(); is_continuing && !exit_pending && it != current_stream.end();) {
+		// Peek the next packet so MSG_DECISION_POINT can decide pauseability.
+		auto next_it = it + 1;
+		peek_next_is_ai_thought = (next_it != current_stream.end()
+			&& next_it->message == MSG_AI_THOUGHT);
 		is_continuing = ReplayAnalyze((*it));
 		if(is_restarting) {
 			mainGame->gMutex.lock();
 			it = current_stream.begin();
 			is_restarting = false;
-			int step = current_step - 1;
+			int step;
+			if(jump_target_step >= 0) {
+				step = jump_target_step;
+				jump_target_step = -1;
+			} else {
+				step = current_step - 1;
+			}
 			if (step < 0)
 				step = 0;
 			if (step == 0) {
@@ -137,6 +408,15 @@ int ReplayMode::ReplayThread() {
 			}
 			skip_step = step;
 			current_step = 0;
+			// MSG_NEW_TURN on the re-play will rebuild current_turn from 0,
+			// and MSG_AI_THOUGHT packets will re-populate the Thoughts tab
+			// as they stream through again.
+			current_turn = 0;
+			current_decision_idx = 0;
+			stop_at_decision_point = false;
+			stop_at_turn_boundary = false;
+			armed_post_turn_boundary = false;
+			ResetThoughtsState();
 		} else
 			it++;
 	}
@@ -225,7 +505,47 @@ bool ReplayMode::ReplayAnalyze(const CoreUtils::Packet& p) {
 			is_swapping = false;
 		}
 		bool pauseable = true;
+		bool skip_client_analyze = false;
+		bool is_decision_marker = false;
 		mainGame->dInfo.curMsg = p.message;
+		if(mainGame->dInfo.curMsg == MSG_NEW_TURN) {
+			current_turn++;
+			current_decision_idx = 0;
+		}
+		// ExodAI markers. Neither is a real game-engine message, so we skip
+		// ClientAnalyze for both. POV filtering: only the POV player's
+		// decisions are marked as pauseable / is_decision_marker; the
+		// opponent's decisions slip through as non-pauseable so Step and
+		// Next Decision don't stop on them.
+		if(mainGame->dInfo.curMsg == MSG_AI_THOUGHT) {
+			HandleAiThoughtPacket(p);
+			skip_client_analyze = true;
+			int player = GetAiThoughtPlayer(p);
+			if(player == GetPovSeat())
+				is_decision_marker = true;
+			else
+				pauseable = false;
+		} else if(mainGame->dInfo.curMsg == MSG_DECISION_POINT) {
+			skip_client_analyze = true;
+			int dp_player = (p.buff_size() >= 1) ? p.data()[0] : -1;
+			if(dp_player != GetPovSeat()) {
+				pauseable = false;  // opponent's decision — just slide past
+			} else if(peek_next_is_ai_thought) {
+				pauseable = false;  // thought follows, pause there instead
+			} else if(known_bot_seats.count(dp_player)) {
+				// Known bot seat with no thought packet: the WindBot framework
+				// auto-resolved this (e.g. chain-with-nothing-chainable, zone
+				// pick, default sort). The model wasn't invoked, so this isn't
+				// a real decision to navigate to.
+				pauseable = false;
+			} else {
+				// Human (or non-ExodAI) seat — every engine select is a real
+				// decision from their perspective. Pause and show the "no
+				// thought data" telemetry.
+				HandleDecisionPointPacket(p);
+				is_decision_marker = true;
+			}
+		}
 		switch (mainGame->dInfo.curMsg) {
 		case MSG_RETRY: {
 			if(mainGame->dInfo.isCatchingUp) {
@@ -299,9 +619,33 @@ bool ReplayMode::ReplayAnalyze(const CoreUtils::Packet& p) {
 		case OLD_REPLAY_MODE:
 			return true;
 		}
-		DuelClient::ClientAnalyze(p);
+		if(!skip_client_analyze)
+			DuelClient::ClientAnalyze(p);
 		if(pauseable) {
 			current_step++;
+			current_decision_idx++;
+			// Thoughts tab rules:
+			//   • MSG_AI_THOUGHT already set the intent text.
+			//   • MSG_DECISION_POINT (non-bot) already set the "No data" text.
+			//   • Everything else is a plain state-change — clear the box.
+			if(!is_decision_marker && mainGame && mainGame->stThoughts)
+				mainGame->stThoughts->setText(L"");
+			// "Next Decision" button: flip back to pause mode when the next
+			// decision marker passes through.
+			if(stop_at_decision_point && is_decision_marker) {
+				stop_at_decision_point = false;
+				is_pausing = true;
+			}
+			// "Next Turn" button: two-stage trip. MSG_NEW_TURN arms the flag;
+			// we actually pause on the NEXT pauseable step so the board has
+			// time to render the new turn's initial state.
+			if(stop_at_turn_boundary && mainGame->dInfo.curMsg == MSG_NEW_TURN) {
+				stop_at_turn_boundary = false;
+				armed_post_turn_boundary = true;
+			} else if(armed_post_turn_boundary) {
+				armed_post_turn_boundary = false;
+				is_pausing = true;
+			}
 			if(skip_step) {
 				skip_step--;
 				if(skip_step == 0) {

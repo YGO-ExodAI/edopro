@@ -36,6 +36,7 @@ struct WindBotPanel {
 	irr::gui::IGUIStaticText* stBotEngine;
 	irr::gui::IGUIStaticText* deckProperties;
 	irr::gui::IGUIButton* btnAdd;
+	irr::gui::IGUIButton* btnMLModel;
 	irr::gui::IGUIButton* btnCommand;
 
 	int CurrentIndex();

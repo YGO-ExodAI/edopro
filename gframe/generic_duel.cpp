@@ -883,6 +883,10 @@ void GenericDuel::Sending(CoreUtils::Packet& packet, int& return_value, bool& re
 		player = BufferIO::Read<uint8_t>(pbuf);
 		WaitforResponse(player);
 		SEND(cur_player[player]);
+		{
+			uint8_t mark[2] = { player, message };
+			replay_stream.emplace_back(MSG_DECISION_POINT, mark, sizeof(mark));
+		}
 		record = false;
 		return_value = 1;
 		break;
@@ -918,6 +922,10 @@ void GenericDuel::Sending(CoreUtils::Packet& packet, int& return_value, bool& re
 		player = BufferIO::Read<uint8_t>(pbuf);
 		WaitforResponse(player);
 		SEND(cur_player[player]);
+		{
+			uint8_t mark[2] = { player, message };
+			replay_stream.emplace_back(MSG_DECISION_POINT, mark, sizeof(mark));
+		}
 		record = false;
 		return_value = 1;
 		break;
@@ -935,6 +943,10 @@ void GenericDuel::Sending(CoreUtils::Packet& packet, int& return_value, bool& re
 		}
 		WaitforResponse(player);
 		SEND(cur_player[player]);
+		{
+			uint8_t mark[2] = { player, message };
+			replay_stream.emplace_back(MSG_DECISION_POINT, mark, sizeof(mark));
+		}
 		record = false;
 		return_value = 1;
 		break;
@@ -953,6 +965,10 @@ void GenericDuel::Sending(CoreUtils::Packet& packet, int& return_value, bool& re
 		}
 		WaitforResponse(player);
 		SEND(cur_player[player]);
+		{
+			uint8_t mark[2] = { player, message };
+			replay_stream.emplace_back(MSG_DECISION_POINT, mark, sizeof(mark));
+		}
 		record = false;
 		return_value = 1;
 		break;
@@ -978,6 +994,10 @@ void GenericDuel::Sending(CoreUtils::Packet& packet, int& return_value, bool& re
 		}
 		WaitforResponse(player);
 		SEND(cur_player[player]);
+		{
+			uint8_t mark[2] = { player, message };
+			replay_stream.emplace_back(MSG_DECISION_POINT, mark, sizeof(mark));
+		}
 		record = false;
 		return_value = 1;
 		break;
@@ -1280,6 +1300,20 @@ int GenericDuel::Analyze(CoreUtils::Packet packet) {
 	new_replay.WriteStream(replay_stream);
 	new_replay.Flush();
 	return return_value;
+}
+void GenericDuel::AiThought(DuelPlayer* dp, void* pdata, uint32_t len) {
+	// Write an MSG_AI_THOUGHT packet directly to the streamed replay right now,
+	// BEFORE the response is processed. The next Analyze() call (triggered by
+	// GetResponse → Process) will clear replay_stream and stage its own packets
+	// on top, so we can't route this through replay_stream; bypass straight to
+	// new_replay. Ordering in the .yrpX: [prior state-changes] [MSG_AI_THOUGHT]
+	// [state-changes from the response] — precisely pinned to the decision.
+	(void)dp;
+	if(len > UINT16_MAX)
+		return; // sanity cap; WindBot should never send something this big
+	CoreUtils::Packet p(MSG_AI_THOUGHT, static_cast<uint8_t*>(pdata), len);
+	new_replay.WritePacket(p);
+	new_replay.Flush();
 }
 void GenericDuel::GetResponse(DuelPlayer* dp, void* pdata, uint32_t len) {
 	last_replay.Write<uint8_t>(len, false);

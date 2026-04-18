@@ -144,6 +144,8 @@ struct info_panel_elements {
 	irr::gui::IGUIListBox* lstLog;
 	irr::gui::IGUITab* tabChat;
 	irr::gui::IGUIListBox* lstChat;
+	irr::gui::IGUITab* tabThoughts;
+	irr::gui::IGUIStaticText* stThoughts;
 	irr::gui::IGUIButton* btnClearLog;
 	irr::gui::IGUIButton* btnExpandLog;
 	irr::gui::IGUIButton* btnClearChat;
@@ -487,6 +489,11 @@ struct game_field_elements {
 	irr::gui::IGUIButton* btnReplayStart;
 	irr::gui::IGUIButton* btnReplayPause;
 	irr::gui::IGUIButton* btnReplayStep;
+	irr::gui::IGUIButton* btnReplayStepDecision;
+	irr::gui::IGUIButton* btnReplayStepDecisionPrev;
+	irr::gui::IGUIButton* btnReplayNextTurn;
+	irr::gui::IGUIButton* btnReplayPrevTurn;
+	irr::gui::IGUIButton* btnReplayRestart;
 	irr::gui::IGUIButton* btnReplayUndo;
 	irr::gui::IGUIButton* btnReplayExit;
 	irr::gui::IGUIButton* btnReplaySwap;

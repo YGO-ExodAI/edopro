@@ -31,6 +31,7 @@ public:
 	void Surrender(DuelPlayer* dp) override;
 	int Analyze(CoreUtils::Packet packet) override;
 	void GetResponse(DuelPlayer* dp, void* pdata, uint32_t len) override;
+	void AiThought(DuelPlayer* dp, void* pdata, uint32_t len) override;
 	void TimeConfirm(DuelPlayer* dp) override;
 	void EndDuel() override;
 
