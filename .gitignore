@@ -39,6 +39,7 @@ CMakeLists.txt.user
 /deploy/
 premake5
 premake5.exe
+upx.exe
 /freetype/*
 /irrlicht/*
 !/irrlicht/premake5.lua
