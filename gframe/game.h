@@ -146,6 +146,7 @@ struct info_panel_elements {
 	irr::gui::IGUIListBox* lstChat;
 	irr::gui::IGUITab* tabThoughts;
 	irr::gui::IGUIStaticText* stThoughts;
+	irr::gui::IGUIButton* btnExpandThoughts;
 	irr::gui::IGUIButton* btnClearLog;
 	irr::gui::IGUIButton* btnExpandLog;
 	irr::gui::IGUIButton* btnClearChat;

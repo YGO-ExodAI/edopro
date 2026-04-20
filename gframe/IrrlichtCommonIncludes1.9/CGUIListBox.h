@@ -131,6 +131,9 @@ public:
 	//! Access the vertical scrollbar
 	virtual IGUIScrollBar* getVerticalScrollBar() const _IRR_OVERRIDE_;
 
+	//! ExodAI: override the skin font for this listbox (pass nullptr to revert to skin)
+	void setOverrideFont(IGUIFont* font);
+
 private:
 
 	struct ListItem {
@@ -167,6 +170,7 @@ private:
 	s32 TotalItemHeight;
 	s32 ItemsIconWidth;
 	gui::IGUIFont* Font;
+	gui::IGUIFont* OverrideFont; // ExodAI: optional per-listbox font, takes precedence over skin font
 	gui::IGUISpriteBank* IconBank;
 	gui::IGUIScrollBar* ScrollBar;
 	u32 selectTime;

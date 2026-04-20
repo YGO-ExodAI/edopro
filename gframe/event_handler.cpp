@@ -1877,8 +1877,11 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 			}
 			case BUTTON_EXPAND_INFOBOX: {
 				mainGame->infosExpanded = mainGame->infosExpanded ? 0 : 1;
-				mainGame->btnExpandLog->setText(mainGame->infosExpanded ? gDataManager->GetSysString(2044).data() : gDataManager->GetSysString(2043).data());
-				mainGame->btnExpandChat->setText(mainGame->infosExpanded ? gDataManager->GetSysString(2044).data() : gDataManager->GetSysString(2043).data());
+				const auto* expandLabel = mainGame->infosExpanded ? gDataManager->GetSysString(2044).data() : gDataManager->GetSysString(2043).data();
+				mainGame->btnExpandLog->setText(expandLabel);
+				mainGame->btnExpandChat->setText(expandLabel);
+				if(mainGame->btnExpandThoughts)
+					mainGame->btnExpandThoughts->setText(expandLabel);
 				{
 					auto wInfosSize = mainGame->wInfos->getRelativePosition();
 					wInfosSize.LowerRightCorner.X = mainGame->ResizeX(mainGame->infosExpanded ? 1023 : 301);
@@ -1888,6 +1891,8 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				lstsSize.LowerRightCorner.Y = mainGame->ResizeY(300 - mainGame->Scale(7)) - mainGame->Scale(10);
 				mainGame->lstLog->setRelativePosition(lstsSize);
 				mainGame->lstChat->setRelativePosition(lstsSize);
+				if(mainGame->stThoughts)
+					mainGame->stThoughts->setRelativePosition(lstsSize);
 				return true;
 			}
 			case BUTTON_REPO_CHANGELOG:	{
@@ -2149,7 +2154,8 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 		case irr::gui::EGET_TAB_CHANGED: {
 			if(event.GUIEvent.Caller == mainGame->wInfos) {
 				auto curTab = mainGame->wInfos->getTab(mainGame->wInfos->getActiveTab());
-				if((curTab != mainGame->tabLog && curTab != mainGame->tabChat) && mainGame->infosExpanded) {
+				// ExodAI: tabThoughts is also a wide-content tab, treat it like log/chat for expand persistence.
+				if((curTab != mainGame->tabLog && curTab != mainGame->tabChat && curTab != mainGame->tabThoughts) && mainGame->infosExpanded) {
 					if(mainGame->infosExpanded == 1) {
 						auto wInfosSize = mainGame->wInfos->getRelativePosition();
 						wInfosSize.LowerRightCorner.X = mainGame->ResizeX(301);

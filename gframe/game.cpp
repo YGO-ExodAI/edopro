@@ -36,6 +36,7 @@
 #include "custom_skin_enum.h"
 #include "joystick_wrapper.h"
 #include "CGUIWindowedTabControl/CGUIWindowedTabControl.h"
+#include "IrrlichtCommonIncludes1.9/CGUIListBox.h" // ExodAI: setOverrideFont for log/chat panels
 #include "file_stream.h"
 #include "porting.h"
 #include "fmt.h"
@@ -1479,35 +1480,45 @@ void Game::PopulateTabSettingsWindow() {
 			auto name = irr::gui::CGUICustomText::addCustomText(L"", true, env, tabInfo, -1, Scale(10, 10, 287, 32));
 			name->setTextAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
 			name->setTextAutoScrolling(irr::gui::CGUICustomText::LEFT_TO_RIGHT_BOUNCING, 0, 1.0f, 0, 120, 300);
+			name->setOverrideFont(thoughtsFont);
 			stName = name;
 		}
 		stInfo = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabInfo, -1, Scale(15, 37, 287, 60));
 		stInfo->setWordWrap(true);
 		stInfo->setOverrideColor(skin::CARDINFO_TYPES_COLOR_VAL);
+		stInfo->setOverrideFont(thoughtsFont);
 		stDataInfo = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabInfo, -1, Scale(15, 60, 287, 83));
 		stDataInfo->setWordWrap(true);
 		stDataInfo->setOverrideColor(skin::CARDINFO_STATS_COLOR_VAL);
+		stDataInfo->setOverrideFont(thoughtsFont);
 		stSetName = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabInfo, -1, Scale(15, 83, 287, 106));
 		stSetName->setWordWrap(true);
 		stSetName->setOverrideColor(skin::CARDINFO_ARCHETYPE_TEXT_COLOR_VAL);
 		stSetName->setVisible(!gGameConfig->chkHideSetname);
+		stSetName->setOverrideFont(thoughtsFont);
 		stPasscodeScope = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabInfo, -1, Scale(15, 106, 287, 129));
 		stPasscodeScope->setWordWrap(true);
 		stPasscodeScope->setOverrideColor(skin::CARDINFO_PASSCODE_SCOPE_TEXT_COLOR_VAL);
 		stPasscodeScope->setVisible(!gGameConfig->hidePasscodeScope);
+		stPasscodeScope->setOverrideFont(thoughtsFont);
 		{
 			auto text = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabInfo, -1, Scale(15, 129, 287, 324));
 			text->enableScrollBar();
+			text->setOverrideFont(thoughtsFont);
 			stText = text;
 		}
 		stText->setWordWrap(true);
 	}
+	// ExodAI: bigger font on log/chat list items + thoughts text. Item heights
+	// must grow alongside the font, otherwise rows clip the descenders.
+	const auto thoughtsItemHeight = Scale(static_cast<irr::s32>(18 + 2));
 	//log
 	{
 		tabLog = wInfos->addTab(gDataManager->GetSysString(1271).data());
 		defaultStrings.emplace_back(tabLog, 1271);
 		lstLog = env->addListBox(Scale(10, 10, 290, 290), tabLog, LISTBOX_LOG, false);
-		lstLog->setItemHeight(Scale(18));
+		static_cast<irr::gui::CGUIListBox*>(lstLog)->setOverrideFont(thoughtsFont);
+		lstLog->setItemHeight(thoughtsItemHeight);
 		btnClearLog = env->addButton(Scale(160, 300, 260, 325), tabLog, BUTTON_CLEAR_LOG, gDataManager->GetSysString(1272).data());
 		defaultStrings.emplace_back(btnClearLog, 1272);
 		btnExpandLog = env->addButton(Scale(40, 300, 140, 325), tabLog, BUTTON_EXPAND_INFOBOX, gDataManager->GetSysString(2043).data());
@@ -1518,7 +1529,8 @@ void Game::PopulateTabSettingsWindow() {
 		tabChat = wInfos->addTab(gDataManager->GetSysString(1279).data());
 		defaultStrings.emplace_back(tabChat, 1279);
 		lstChat = env->addListBox(Scale(10, 10, 290, 290), tabChat, -1, false);
-		lstChat->setItemHeight(Scale(18));
+		static_cast<irr::gui::CGUIListBox*>(lstChat)->setOverrideFont(thoughtsFont);
+		lstChat->setItemHeight(thoughtsItemHeight);
 		btnClearChat = env->addButton(Scale(160, 300, 260, 325), tabChat, BUTTON_CLEAR_CHAT, gDataManager->GetSysString(1282).data());
 		defaultStrings.emplace_back(btnClearChat, 1282);
 		btnExpandChat = env->addButton(Scale(40, 300, 140, 325), tabChat, BUTTON_EXPAND_INFOBOX, gDataManager->GetSysString(2043).data());
@@ -1527,11 +1539,14 @@ void Game::PopulateTabSettingsWindow() {
 	//thoughts (ExodAI: model's per-step reasoning during replay playback)
 	{
 		tabThoughts = wInfos->addTab(L"Thoughts");
-		auto thoughtsText = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabThoughts, -1, Scale(10, 10, 290, 324));
+		// Leave room for the Expand button at the bottom (matches log/chat layout).
+		auto thoughtsText = irr::gui::CGUICustomText::addCustomText(L"", false, env, tabThoughts, -1, Scale(10, 10, 290, 290));
 		thoughtsText->enableScrollBar();
 		thoughtsText->setWordWrap(true);
 		thoughtsText->setOverrideFont(thoughtsFont);
 		stThoughts = thoughtsText;
+		btnExpandThoughts = env->addButton(Scale(40, 300, 140, 325), tabThoughts, BUTTON_EXPAND_INFOBOX, gDataManager->GetSysString(2043).data());
+		defaultStrings.emplace_back(btnExpandThoughts, 2043);
 	}
 	//system
 	{
@@ -3765,11 +3780,16 @@ void Game::OnResize() {
 	btnClearChat->setRelativePosition(clearSize);
 	btnExpandChat->setRelativePosition(expandSize);
 
+	if(btnExpandThoughts)
+		btnExpandThoughts->setRelativePosition(expandSize);
+
 	auto lstsSize = Resize(10, 10, infosExpanded ? 1012 : 290, 0);
 	lstsSize.LowerRightCorner.Y = expandSize.UpperLeftCorner.Y - Scale(10);
 
 	lstLog->setRelativePosition(lstsSize);
 	lstChat->setRelativePosition(lstsSize);
+	if(stThoughts)
+		stThoughts->setRelativePosition(lstsSize);
 
 	imageManager.ClearTexture(true);
 	btnPSAD->setImage(imageManager.tCover[0]);
