@@ -34,6 +34,19 @@ public:
 	static void StopPlay(bool is_exiting = false);
 	static void Restart();
 	static void SetResponse(void* resp, size_t len);
+
+	// ExodAI Phase P1 Primitive 1, Chunk 8: in-duel state save hotkey.
+	// Calls OCG_DuelSaveState on the current single-mode duel and writes
+	// the blob to <positions_dir>/<basename>.bin plus a minimal JSON
+	// sidecar at <positions_dir>/<basename>.bin.json. Returns true on
+	// success, false on no-active-duel / refuse / I/O error (msg
+	// describes which).
+	//
+	// positions_dir defaults to "./replays/positions/" (relative to the
+	// EDOPro working dir); EXODAI_POSITIONS_DIR env var overrides.
+	// Caller (event_handler.cpp) surfaces the message via the in-game
+	// log tab.
+	static bool SaveStateToFile(std::string& out_msg);
 	static int SinglePlayThread(DuelOptions&& duelOptions);
 	static bool SinglePlayAnalyze(CoreUtils::Packet& packet);
 	

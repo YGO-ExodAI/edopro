@@ -1747,6 +1747,20 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 			break;
 		}
 		case irr::KEY_KEY_S: {
+			// Chunk 8: Ctrl+S = ExodAI position-library save hotkey.
+			// Intercept BEFORE the chain-control logic. Fires on key
+			// down (single shot per press, hence !PressedDown gate so
+			// holding doesn't spam).
+			if(event.KeyInput.Control && !event.KeyInput.PressedDown
+					&& !mainGame->HasFocus(irr::gui::EGUIET_EDIT_BOX)
+					&& mainGame->dInfo.isInDuel) {
+				std::string msg;
+				bool ok = SingleMode::SaveStateToFile(msg);
+				// AddLog wants wstring; convert UTF-8 → wide.
+				mainGame->AddLog(BufferIO::DecodeUTF8(
+					(ok ? "[ExodAI save] " : "[ExodAI save FAILED] ") + msg));
+				break;
+			}
 			if(!mainGame->HasFocus(irr::gui::EGUIET_EDIT_BOX)) {
 				mainGame->ignore_chain = event.KeyInput.PressedDown;
 				mainGame->always_chain = false;
