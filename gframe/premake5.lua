@@ -265,10 +265,14 @@ if not _OPTIONS["no-core"] then
 		-- ExodAI deploy: after a successful Release|Win32 build, copy the
 		-- freshly built ygopro.exe into C:\ProjectIgnis\EDOPro.exe so the
 		-- user's live client (with cards/scripts/databases) picks up the
-		-- change without a manual copy step.
+		-- change without a manual copy step. ocgcore.dll is copied too:
+		-- ygopro.exe links against ocgcore.dll (import table), so a stale
+		-- DLL at ProjectIgnis produces an "entry point X could not be located"
+		-- loader error the next time ocgcore grows a new export.
 		filter { "system:windows", "configurations:Release" }
 			postbuildcommands {
-				'copy /Y "%{cfg.buildtarget.abspath}" "C:\\ProjectIgnis\\EDOPro.exe"'
+				'copy /Y "%{cfg.buildtarget.abspath}" "C:\\ProjectIgnis\\EDOPro.exe"',
+				'copy /Y "%{cfg.buildtarget.directory}\\ocgcore.dll" "C:\\ProjectIgnis\\ocgcore.dll"',
 			}
 		filter {}
 end
