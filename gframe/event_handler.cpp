@@ -12,6 +12,8 @@
 #include "image_manager.h"
 #include "replay_mode.h"
 #include "single_mode.h"
+#include "netserver.h"
+#include "exodai_save_state.h"
 #include "materials.h"
 #include "progressivebuffer.h"
 #include "utils_gui.h"
@@ -1751,11 +1753,25 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 			// Intercept BEFORE the chain-control logic. Fires on key
 			// down (single shot per press, hence !PressedDown gate so
 			// holding doesn't spam).
+			//
+			// Dispatches by duel mode: single-mode uses SingleMode's
+			// static pduel, LAN-host (incl. LAN+AI) uses the duel
+			// handle owned by NetServer's active DuelMode. LAN clients
+			// have no local duel handle — save fails with a clear msg.
 			if(event.KeyInput.Control && !event.KeyInput.PressedDown
 					&& !mainGame->HasFocus(irr::gui::EGUIET_EDIT_BOX)
 					&& mainGame->dInfo.isInDuel) {
 				std::string msg;
-				bool ok = SingleMode::SaveStateToFile(msg);
+				bool ok = false;
+				if(mainGame->dInfo.isSingleMode) {
+					ok = SingleMode::SaveStateToFile(msg);
+				} else if(OCG_Duel host_pduel = NetServer::GetHostDuelHandle()) {
+					ok = ExodAIWriteDuelStateToFile(host_pduel, "edopro-hotkey-lan", msg);
+				} else {
+					msg = "Save: no host-side duel handle (not single-mode; "
+						  "not the LAN host). State lives on the remote "
+						  "server — run Ctrl+S on the hosting EDOPro.";
+				}
 				// AddLog wants wstring; convert UTF-8 → wide.
 				mainGame->AddLog(BufferIO::DecodeUTF8(
 					(ok ? "[ExodAI save] " : "[ExodAI save FAILED] ") + msg));

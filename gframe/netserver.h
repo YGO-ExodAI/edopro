@@ -31,6 +31,15 @@ public:
 	// bot_match.cpp to block on the headless eval harness until a duel
 	// completes and StopServer() is invoked by generic_duel.
 	static bool IsRunning() { return net_evbase != nullptr; }
+	// ExodAI Phase P1 Primitive 1: LAN-host Ctrl+S save path.
+	// Returns the host-side OCG_Duel handle if a duel is currently
+	// running on this server, else nullptr. Safe to call from the UI
+	// thread while the server thread is parked in event_base_dispatch
+	// awaiting the next CTOS_RESPONSE (matches the single-mode hotkey's
+	// timing assumption).
+	static OCG_Duel GetHostDuelHandle() {
+		return duel_mode ? duel_mode->pduel : nullptr;
+	}
 	static void StopBroadcast();
 	static void StopListen();
 	static void BroadcastEvent(evutil_socket_t fd, short events, void* arg);
