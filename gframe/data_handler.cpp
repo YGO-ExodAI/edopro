@@ -10,6 +10,7 @@
 #include "utils.h"
 #include "windbot.h"
 #include "windbot_panel.h"
+#include "exodai_dev_build.h"
 #if IRRLICHT_VERSION_MAJOR==1 && IRRLICHT_VERSION_MINOR==9
 #include "IrrlichtCommonIncludes1.9/CFileSystem.h"
 #else
@@ -109,6 +110,7 @@ void DataHandler::LoadZipArchives() {
 	}
 }
 DataHandler::DataHandler() {
+	ErrorLog("[ExodAI] EDOPro dev build #{} starting", EXODAI_DEV_BUILD);
 	configs = std::make_unique<GameConfig>();
 	gGameConfig = configs.get();
 #if !EDOPRO_ANDROID
