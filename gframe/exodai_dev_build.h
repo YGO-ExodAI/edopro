@@ -5,6 +5,6 @@
 // Logged to EDOPro's log panel on ML Model launch so the user can confirm
 // they're running the latest build. See also the matching constant in
 // Windbot/Program.cs — they're bumped together.
-constexpr int EXODAI_DEV_BUILD = 26;
+constexpr int EXODAI_DEV_BUILD = 27;
 
 #endif

@@ -65,18 +65,24 @@ void DataHandler::LoadPicUrls() {
 #ifdef DEFAULT_PIC_URL
 							imageDownloader->AddDownloadResource({ DEFAULT_PIC_URL, imgType::ART });
 #else
+							ErrorLog("Binary compiled without DEFAULT_PIC_URL; card art cannot auto-download via 'default'. "
+							         "Add an explicit URL entry to config/user_configs.json to restore image downloads.");
 							continue;
 #endif
 						} else if(type == "field") {
 #ifdef DEFAULT_FIELD_URL
 							imageDownloader->AddDownloadResource({ DEFAULT_FIELD_URL, imgType::FIELD });
 #else
+							ErrorLog("Binary compiled without DEFAULT_FIELD_URL; field art cannot auto-download via 'default'. "
+							         "Add an explicit URL entry to config/user_configs.json to restore image downloads.");
 							continue;
 #endif
 						} else if(type == "cover") {
 #ifdef DEFAULT_COVER_URL
 							imageDownloader->AddDownloadResource({ DEFAULT_COVER_URL, imgType::COVER });
 #else
+							ErrorLog("Binary compiled without DEFAULT_COVER_URL; card covers cannot auto-download via 'default'. "
+							         "Add an explicit URL entry to config/user_configs.json to restore image downloads.");
 							continue;
 #endif
 						}
