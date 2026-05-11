@@ -7,6 +7,7 @@ namespace ygo {
 
 struct MLModelLaunchResult {
 	bool ok = false;
+	bool cancelled = false;  // true when user dismissed the file-picker
 	std::wstring modelName;
 	std::wstring errorMessage;
 };

@@ -4,6 +4,8 @@
 #if EDOPRO_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <commdlg.h>
+#pragma comment(lib, "comdlg32.lib")
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -52,27 +54,22 @@ std::wstring GetEnvOrDefault(const wchar_t* var, const wchar_t* def) {
 	return def;
 }
 
-std::wstring FindLatestCheckpointName(const std::wstring& srcDir) {
-	namespace fs = std::filesystem;
-	std::error_code ec;
-	fs::path modelsDir = fs::path(srcDir) / L"models";
-	if(!fs::exists(modelsDir, ec))
-		return {};
-	fs::path latest;
-	fs::file_time_type latestTime{};
-	for(const auto& entry : fs::directory_iterator(modelsDir, ec)) {
-		if(entry.path().extension() != ".pt")
-			continue;
-		auto t = fs::last_write_time(entry, ec);
-		if(ec) continue;
-		if(latest.empty() || t > latestTime) {
-			latest = entry.path();
-			latestTime = t;
-		}
-	}
-	if(latest.empty())
-		return {};
-	return latest.stem().wstring();
+// Show a Win32 file-open dialog for picking a .pt checkpoint.
+// Returns the chosen path, or empty string if the user cancelled.
+std::wstring PickModelFile(const std::wstring& initialDir) {
+	wchar_t fileBuf[MAX_PATH] = {};
+	OPENFILENAMEW ofn{};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = nullptr;
+	ofn.lpstrFilter = L"PyTorch checkpoint (*.pt)\0*.pt\0All files (*.*)\0*.*\0\0";
+	ofn.lpstrFile = fileBuf;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrInitialDir = initialDir.empty() ? nullptr : initialDir.c_str();
+	ofn.lpstrTitle = L"Select ExodAI model checkpoint";
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+	if(GetOpenFileNameW(&ofn))
+		return fileBuf;
+	return {};
 }
 
 void PostLogLine(const std::wstring& line) {
@@ -152,7 +149,7 @@ bool SpawnWithCapture(const wchar_t* exePath, std::wstring cmdLine, const wchar_
 // false if one already appeared to be running (or if spawn failed — see err).
 // Holds the singleton mutex in g_serveModelMutex so ShutdownMLModelBot can
 // release it for a fresh launch.
-bool MaybeSpawnServeModel(const std::wstring& srcDir, std::wstring& errMsg) {
+bool MaybeSpawnServeModel(const std::wstring& srcDir, const std::wstring& modelPath, std::wstring& errMsg) {
 	if(g_serveModelMutex)
 		return false; // we already own the slot
 	HANDLE mtx = CreateMutexW(nullptr, TRUE, SERVE_MODEL_MUTEX);
@@ -178,7 +175,11 @@ bool MaybeSpawnServeModel(const std::wstring& srcDir, std::wstring& errMsg) {
 	// serve_model.py's startup logs sit in the kernel pipe buffer until
 	// it's full or the process exits, so we can't see model-load progress
 	// or crashes in real time.
-	std::wstring cmd = epro::format(L"\"{}\" -u \"{}\\serve_model.py\"", py, srcDir);
+	std::wstring cmd;
+	if(modelPath.empty())
+		cmd = epro::format(L"\"{}\" -u \"{}\\serve_model.py\"", py, srcDir);
+	else
+		cmd = epro::format(L"\"{}\" -u \"{}\\serve_model.py\" --checkpoint \"{}\"", py, srcDir, modelPath);
 	DWORD err = 0;
 	if(!SpawnWithCapture(nullptr, cmd, srcDir.c_str(), L"[serve] ", err)) {
 		errMsg = epro::format(L"Failed to start serve_model.py (CreateProcess error {})", err);
@@ -197,14 +198,19 @@ MLModelLaunchResult LaunchMLModelBot(int port, const std::wstring& pass) {
 	auto srcDir = GetEnvOrDefault(L"EXODAI_SRC_DIR", DEFAULT_SRC_DIR);
 	auto windbotDir = GetEnvOrDefault(L"EXODAI_WINDBOT_DIR", DEFAULT_WINDBOT_DIR);
 
-	res.modelName = FindLatestCheckpointName(srcDir);
-	if(res.modelName.empty()) {
-		res.errorMessage = epro::format(L"No model checkpoint (.pt) found in {}\\models", srcDir);
+	// Show file-picker so Joe can choose which checkpoint to load.
+	// EXODAI_MODELS_DIR overrides the default initial directory.
+	auto modelsDir = srcDir + L"\\models";
+	auto initialDir = GetEnvOrDefault(L"EXODAI_MODELS_DIR", modelsDir.c_str());
+	auto modelPath = PickModelFile(initialDir);
+	if(modelPath.empty()) {
+		res.cancelled = true;
 		return res;
 	}
+	res.modelName = std::filesystem::path(modelPath).stem().wstring();
 
 	std::wstring serveErr;
-	MaybeSpawnServeModel(srcDir, serveErr);
+	MaybeSpawnServeModel(srcDir, modelPath, serveErr);
 	if(!serveErr.empty()) {
 		res.errorMessage = serveErr;
 		return res;

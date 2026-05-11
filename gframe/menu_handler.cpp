@@ -457,6 +457,8 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 				}
 				mainGame->AddLog(epro::format(L"[ExodAI] EDOPro dev build #{} — launching ML Model", EXODAI_DEV_BUILD), 0);
 				auto result = LaunchMLModelBot(port, std::wstring{ mainGame->dInfo.secret.pass });
+				if(result.cancelled)
+					break;
 				if(!result.ok) {
 					mainGame->PopupMessage(result.errorMessage);
 					break;

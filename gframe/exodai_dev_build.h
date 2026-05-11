@@ -6,6 +6,6 @@
 // confirms the running binary regardless of which screens were opened,
 // and to the in-game log panel when ML Model is launched.
 // See also the matching constant in Windbot/Program.cs — bumped together.
-constexpr int EXODAI_DEV_BUILD = 28;
+constexpr int EXODAI_DEV_BUILD = 29;
 
 #endif
