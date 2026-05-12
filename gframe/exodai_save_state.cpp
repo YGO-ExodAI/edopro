@@ -1,6 +1,9 @@
 #include "exodai_save_state.h"
 
 #include "fmt.h"
+#include "game.h"
+#include "file_stream.h"
+#include "utils.h"
 
 #include <algorithm>
 #include <chrono>
@@ -12,9 +15,14 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 // Helpers duplicated from the original single_mode.cpp implementation
 // (SHA256 / iso_utc_now / positions_dir / ensure_dir / make_basename).
@@ -134,6 +142,86 @@ std::string make_basename() {
     return std::string(buf) + rb + ".bin";
 }
 
+// SHA-256 over the script corpus reachable via Game::script_dirs.
+//
+// Algorithm:
+//   1. Walk mainGame->script_dirs in order. Skip the "archives" sentinel
+//      — files packaged in .ypk archives are not enumerated here. The
+//      ExodAI deployment loads from ./script/ on disk, so plain-file
+//      enumeration is sufficient. If we later move to archive-packaged
+//      corpora, extend this to include archive contents.
+//   2. For each directory, list *.lua at depth 0 — script_dirs already
+//      has subdirectories appended as their own entries (see
+//      Game::PopulateResourcesDirectories), so recursion is not needed.
+//   3. Dedup by basename: first-match-wins, mirroring Game::FindScript's
+//      script_dirs walk. This ensures the hash reflects the bytes the
+//      engine would actually load, not every .lua file that happens to
+//      exist on disk.
+//   4. Sort entries by basename (ascending, UTF-8 byte order) for
+//      stability across filesystem enumeration order.
+//   5. For each (basename, full_path), SHA-256 update with:
+//        u32_le(name_len) | name_bytes | u32_le(content_len) | content_bytes
+//      Length-prefix framing prevents collisions where distinct
+//      (name, content) pairs could share a concatenated representation.
+//   6. Hex digest is returned. Cached in get_script_corpus_hash() via
+//      std::call_once so the cost — ~14k Lua files, a few hundred ms —
+//      is paid at most once per process.
+//
+// Returns "" if mainGame is null or script_dirs is empty (defensive;
+// in practice script_dirs is populated very early at startup).
+std::string compute_script_corpus_hash_impl() {
+    if (mainGame == nullptr || mainGame->script_dirs.empty())
+        return std::string();
+
+    std::vector<std::pair<std::string, epro::path_string>> entries;
+    std::unordered_set<std::string> seen;
+    static const std::vector<epro::path_stringview> lua_ext{ EPRO_TEXT("lua") };
+    for (const auto& dir : mainGame->script_dirs) {
+        if (dir == EPRO_TEXT("archives")) continue;
+        auto files = Utils::FindFiles(dir, lua_ext, 0);
+        for (auto& name : files) {
+            std::string basename_u8 = Utils::ToUTF8IfNeeded(epro::path_stringview{ name });
+            if (seen.insert(basename_u8).second)
+                entries.emplace_back(std::move(basename_u8), dir + name);
+        }
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    Sha256 sha;
+    auto put_u32_le = [&sha](uint32_t v) {
+        uint8_t b[4] = {
+            static_cast<uint8_t>(v & 0xff),
+            static_cast<uint8_t>((v >> 8) & 0xff),
+            static_cast<uint8_t>((v >> 16) & 0xff),
+            static_cast<uint8_t>((v >> 24) & 0xff)
+        };
+        sha.update(b, 4);
+    };
+    for (const auto& entry : entries) {
+        const std::string& bn = entry.first;
+        const epro::path_string& path = entry.second;
+        FileStream f(path.data(), FileStream::in | FileStream::binary);
+        if (f.fail()) continue;  // missing/unreadable entry: skip rather than poison
+        std::string content{
+            std::istreambuf_iterator<char>(f),
+            std::istreambuf_iterator<char>()
+        };
+        put_u32_le(static_cast<uint32_t>(bn.size()));
+        sha.update(bn.data(), bn.size());
+        put_u32_le(static_cast<uint32_t>(content.size()));
+        sha.update(content.data(), content.size());
+    }
+    return sha.finalize();
+}
+
+std::string get_script_corpus_hash() {
+    static std::once_flag once;
+    static std::string cached;
+    std::call_once(once, [] { cached = compute_script_corpus_hash_impl(); });
+    return cached;
+}
+
 }  // namespace
 
 bool ExodAIWriteDuelStateToFile(OCG_Duel pduel, const char* source_tag, std::string& out_msg) {
@@ -193,7 +281,7 @@ bool ExodAIWriteDuelStateToFile(OCG_Duel pduel, const char* source_tag, std::str
         f << "  \"save_safety\": \"OK\",\n";
         f << "  \"refuse_reason\": \"\",\n";
         f << "  \"provenance\": {\"source\": \"" << source_tag << "\"},\n";
-        f << "  \"script_corpus_hash\": {},\n";
+        f << "  \"script_corpus_hash\": \"" << get_script_corpus_hash() << "\",\n";
         f << "  \"engine_build_hash\": \"\",\n";
         f << "  \"blob_sha256\": \"" << blob_hash << "\",\n";
         f << "  \"tags\": [\"" << source_tag << "\"],\n";
